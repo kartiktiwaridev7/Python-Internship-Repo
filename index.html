@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>SentiScan — Sentiment Analysis</title>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet"/>
+  <style>
+    /* ── RESET & BASE ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0a0a0f;
+      --surface:   #12121a;
+      --border:    #1e1e2e;
+      --text:      #e8e8f0;
+      --muted:     #6b6b80;
+      --pos:       #22d98a;
+      --neg:       #ff4d6d;
+      --neu:       #f0c040;
+      --accent:    #7b61ff;
+      --radius:    16px;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'DM Mono', monospace;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── ANIMATED BACKGROUND ── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 80% 50% at 20% 10%, rgba(123,97,255,0.08) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 40% at 80% 80%, rgba(34,217,138,0.05) 0%, transparent 60%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ── LAYOUT ── */
+    .wrapper {
+      position: relative;
+      z-index: 1;
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 48px 24px 80px;
+    }
+
+    /* ── HEADER ── */
+    header {
+      text-align: center;
+      margin-bottom: 48px;
+      animation: fadeDown 0.6s ease both;
+    }
+
+    .logo {
+      font-family: 'Syne', sans-serif;
+      font-size: clamp(2.4rem, 6vw, 4rem);
+      font-weight: 800;
+      letter-spacing: -2px;
+      background: linear-gradient(135deg, #fff 30%, var(--accent));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      line-height: 1;
+    }
+
+    .tagline {
+      margin-top: 10px;
+      font-size: 0.8rem;
+      color: var(--muted);
+      letter-spacing: 3px;
+      text-transform: uppercase;
+    }
+
+    /* ── INPUT CARD ── */
+    .input-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px;
+      margin-bottom: 28px;
+      animation: fadeUp 0.6s 0.1s ease both;
+    }
+
+    .input-label {
+      font-family: 'Syne', sans-serif;
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 12px;
+      display: block;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 140px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text);
+      font-family: 'DM Mono', monospace;
+      font-size: 0.95rem;
+      line-height: 1.7;
+      padding: 16px;
+      resize: vertical;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      outline: none;
+    }
+
+    textarea:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(123,97,255,0.15);
+    }
+
+    textarea::placeholder { color: var(--muted); }
+
+    .input-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 16px;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    #charCount {
+      font-size: 0.75rem;
+      color: var(--muted);
+    }
+
+    .btn-row { display: flex; gap: 10px; }
+
+    button {
+      font-family: 'Syne', sans-serif;
+      font-weight: 700;
+      font-size: 0.85rem;
+      letter-spacing: 1px;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      padding: 12px 24px;
+      transition: all 0.2s;
+    }
+
+    #analyzeBtn {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    #analyzeBtn:hover { background: #6a50ee; transform: translateY(-1px); }
+    #analyzeBtn:active { transform: translateY(0); }
+    #analyzeBtn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+    #clearBtn {
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid var(--border);
+    }
+
+    #clearBtn:hover { color: var(--text); border-color: var(--muted); }
+
+    /* ── RESULT CARD ── */
+    #result {
+      display: none;
+      animation: fadeUp 0.4s ease both;
+    }
+
+    .result-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px;
+      margin-bottom: 20px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .result-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+      border-radius: var(--radius) var(--radius) 0 0;
+      transition: background 0.4s;
+    }
+
+    .result-card.positive::before { background: var(--pos); }
+    .result-card.negative::before { background: var(--neg); }
+    .result-card.neutral::before  { background: var(--neu); }
+
+    /* sentiment badge */
+    .sentiment-header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 28px;
+    }
+
+    .emoji-bubble {
+      width: 64px; height: 64px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 2rem;
+      flex-shrink: 0;
+    }
+
+    .positive .emoji-bubble { background: rgba(34,217,138,0.12); }
+    .negative .emoji-bubble { background: rgba(255,77,109,0.12); }
+    .neutral  .emoji-bubble { background: rgba(240,192,64,0.12); }
+
+    .sentiment-label {
+      font-family: 'Syne', sans-serif;
+      font-size: 2rem;
+      font-weight: 800;
+      letter-spacing: -1px;
+    }
+
+    .positive .sentiment-label { color: var(--pos); }
+    .negative .sentiment-label { color: var(--neg); }
+    .neutral  .sentiment-label { color: var(--neu); }
+
+    .sentiment-sub {
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+
+    /* score bars */
+    .scores-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      margin-bottom: 24px;
+    }
+
+    @media (max-width: 520px) { .scores-grid { grid-template-columns: 1fr; } }
+
+    .score-box {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 18px;
+    }
+
+    .score-title {
+      font-size: 0.7rem;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    .score-value {
+      font-family: 'Syne', sans-serif;
+      font-size: 1.8rem;
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+
+    .bar-track {
+      height: 6px;
+      background: var(--border);
+      border-radius: 99px;
+      overflow: hidden;
+    }
+
+    .bar-fill {
+      height: 100%;
+      border-radius: 99px;
+      width: 0%;
+      transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .bar-fill.polarity   { background: linear-gradient(90deg, var(--neg), var(--neu), var(--pos)); }
+    .bar-fill.subjectivity { background: linear-gradient(90deg, var(--accent), #c084fc); }
+
+    .score-range {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.65rem;
+      color: var(--muted);
+      margin-top: 6px;
+    }
+
+    /* meta stats */
+    .meta-row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .meta-chip {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 99px;
+      padding: 6px 14px;
+      font-size: 0.75rem;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .meta-chip span { color: var(--text); }
+
+    /* ── HISTORY ── */
+    #historySection {
+      display: none;
+      animation: fadeUp 0.4s 0.1s ease both;
+    }
+
+    .section-title {
+      font-family: 'Syne', sans-serif;
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 14px;
+    }
+
+    .history-list { display: flex; flex-direction: column; gap: 10px; }
+
+    .history-item {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 18px;
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      align-items: center;
+      gap: 14px;
+      cursor: pointer;
+      transition: border-color 0.2s, transform 0.15s;
+    }
+
+    .history-item:hover {
+      border-color: var(--accent);
+      transform: translateX(3px);
+    }
+
+    .h-emoji { font-size: 1.3rem; }
+
+    .h-text {
+      font-size: 0.82rem;
+      color: var(--muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .h-badge {
+      font-family: 'Syne', sans-serif;
+      font-size: 0.7rem;
+      font-weight: 700;
+      padding: 3px 10px;
+      border-radius: 99px;
+    }
+
+    .h-badge.positive { background: rgba(34,217,138,0.15); color: var(--pos); }
+    .h-badge.negative { background: rgba(255,77,109,0.15); color: var(--neg); }
+    .h-badge.neutral  { background: rgba(240,192,64,0.15);  color: var(--neu); }
+
+    /* ── LOADING SPINNER ── */
+    .spinner {
+      width: 18px; height: 18px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+      display: none;
+    }
+
+    /* ── ERROR ── */
+    .error-msg {
+      background: rgba(255,77,109,0.1);
+      border: 1px solid rgba(255,77,109,0.3);
+      border-radius: 10px;
+      padding: 14px 18px;
+      font-size: 0.85rem;
+      color: var(--neg);
+      display: none;
+      margin-top: 12px;
+    }
+
+    /* ── ANIMATIONS ── */
+    @keyframes fadeDown {
+      from { opacity: 0; transform: translateY(-20px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* ── EXAMPLE PILLS ── */
+    .examples {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 14px;
+    }
+
+    .pill {
+      font-size: 0.72rem;
+      padding: 5px 12px;
+      border-radius: 99px;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      cursor: pointer;
+      transition: all 0.2s;
+      background: transparent;
+      font-family: 'DM Mono', monospace;
+    }
+
+    .pill:hover { border-color: var(--accent); color: var(--text); background: rgba(123,97,255,0.08); }
+  </style>
+</head>
+<body>
+<div class="wrapper">
+
+  <!-- HEADER -->
+  <header>
+    <div class="logo">SentiScan</div>
+    <p class="tagline">Sentiment Analysis · Powered by TextBlob</p>
+  </header>
+
+  <!-- INPUT CARD -->
+  <div class="input-card">
+    <label class="input-label" for="textInput">Enter your text</label>
+    <textarea
+      id="textInput"
+      placeholder="Type or paste any text here — a review, tweet, sentence, or paragraph..."
+      maxlength="5000"
+    ></textarea>
+
+    <div class="input-footer">
+      <div id="charCount">0 / 5000 characters</div>
+      <div class="btn-row">
+        <button id="clearBtn" onclick="clearAll()">Clear</button>
+        <button id="analyzeBtn" onclick="analyze()">
+          <span id="btnText">Analyze →</span>
+          <div class="spinner" id="spinner"></div>
+        </button>
+      </div>
+    </div>
+
+    <div class="error-msg" id="errorMsg"></div>
+
+    <!-- Quick examples -->
+    <div class="examples">
+      <span style="font-size:0.7rem;color:var(--muted);align-self:center;">Try:</span>
+      <button class="pill" onclick="setExample('I absolutely love this product! It exceeded all my expectations.')">😊 Positive</button>
+      <button class="pill" onclick="setExample('This was the worst experience I have ever had. Terrible service.')">😞 Negative</button>
+      <button class="pill" onclick="setExample('The package arrived on Tuesday. It contained three items.')">😐 Neutral</button>
+      <button class="pill" onclick="setExample('The movie was somewhat enjoyable but the ending was disappointing.')">🤔 Mixed</button>
+    </div>
+  </div>
+
+  <!-- RESULT CARD -->
+  <div id="result">
+    <div class="result-card" id="resultCard">
+
+      <div class="sentiment-header">
+        <div class="emoji-bubble" id="emojiBubble">😐</div>
+        <div>
+          <div class="sentiment-label" id="sentimentLabel">Neutral</div>
+          <div class="sentiment-sub" id="sentimentSub">Subjectivity: Mixed</div>
+        </div>
+      </div>
+
+      <div class="scores-grid">
+        <!-- Polarity -->
+        <div class="score-box">
+          <div class="score-title">Polarity Score</div>
+          <div class="score-value" id="polarityVal">0.00</div>
+          <div class="bar-track">
+            <div class="bar-fill polarity" id="polarityBar"></div>
+          </div>
+          <div class="score-range"><span>−1.0 Negative</span><span>+1.0 Positive</span></div>
+        </div>
+
+        <!-- Subjectivity -->
+        <div class="score-box">
+          <div class="score-title">Subjectivity Score</div>
+          <div class="score-value" id="subjectivityVal">0.00</div>
+          <div class="bar-track">
+            <div class="bar-fill subjectivity" id="subjectivityBar"></div>
+          </div>
+          <div class="score-range"><span>0.0 Objective</span><span>1.0 Subjective</span></div>
+        </div>
+      </div>
+
+      <!-- Meta chips -->
+      <div class="meta-row">
+        <div class="meta-chip">Words <span id="wordCount">—</span></div>
+        <div class="meta-chip">Sentences <span id="sentenceCount">—</span></div>
+        <div class="meta-chip">Analyzed at <span id="timeStamp">—</span></div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- HISTORY -->
+  <div id="historySection">
+    <div class="section-title">Recent Analyses</div>
+    <div class="history-list" id="historyList"></div>
+  </div>
+
+</div>
+
+<script>
+  const textarea = document.getElementById('textInput');
+  const charCount = document.getElementById('charCount');
+
+  textarea.addEventListener('input', () => {
+    charCount.textContent = `${textarea.value.length} / 5000 characters`;
+  });
+
+  textarea.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.key === 'Enter') analyze();
+  });
+
+  function setExample(text) {
+    textarea.value = text;
+    charCount.textContent = `${text.length} / 5000 characters`;
+    textarea.focus();
+  }
+
+  function clearAll() {
+    textarea.value = '';
+    charCount.textContent = '0 / 5000 characters';
+    document.getElementById('result').style.display = 'none';
+    document.getElementById('errorMsg').style.display = 'none';
+    textarea.focus();
+  }
+
+  function setLoading(on) {
+    const btn = document.getElementById('analyzeBtn');
+    const txt = document.getElementById('btnText');
+    const sp  = document.getElementById('spinner');
+    btn.disabled = on;
+    txt.style.display = on ? 'none' : 'inline';
+    sp.style.display  = on ? 'inline-block' : 'none';
+  }
+
+  async function analyze() {
+    const text = textarea.value.trim();
+    const errEl = document.getElementById('errorMsg');
+    errEl.style.display = 'none';
+
+    if (!text) {
+      errEl.textContent = 'Please enter some text before analyzing.';
+      errEl.style.display = 'block';
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const res = await fetch('/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text })
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        errEl.textContent = data.error || 'Something went wrong.';
+        errEl.style.display = 'block';
+        return;
+      }
+
+      displayResult(data);
+      loadHistory();
+
+    } catch (e) {
+      errEl.textContent = 'Network error. Make sure the Flask server is running.';
+      errEl.style.display = 'block';
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function displayResult(d) {
+    const card = document.getElementById('resultCard');
+    card.className = `result-card ${d.css}`;
+
+    document.getElementById('emojiBubble').textContent  = d.emoji;
+    document.getElementById('sentimentLabel').textContent = d.label;
+    document.getElementById('sentimentSub').textContent   = `Subjectivity: ${d.subj_label}`;
+    document.getElementById('polarityVal').textContent     = (d.polarity >= 0 ? '+' : '') + d.polarity.toFixed(4);
+    document.getElementById('subjectivityVal').textContent = d.subjectivity.toFixed(4);
+    document.getElementById('wordCount').textContent       = d.words;
+    document.getElementById('sentenceCount').textContent   = d.sentences;
+    document.getElementById('timeStamp').textContent       = d.timestamp;
+
+    // Animate bars
+    setTimeout(() => {
+      // Polarity: map [-1,1] → [0%,100%]
+      const pPct = ((d.polarity + 1) / 2) * 100;
+      document.getElementById('polarityBar').style.width = pPct + '%';
+
+      // Subjectivity: already [0,1]
+      document.getElementById('subjectivityBar').style.width = (d.subjectivity * 100) + '%';
+    }, 50);
+
+    document.getElementById('result').style.display = 'block';
+    document.getElementById('result').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  async function loadHistory() {
+    try {
+      const res = await fetch('/history');
+      const items = await res.json();
+      if (items.length === 0) return;
+
+      const list = document.getElementById('historyList');
+      list.innerHTML = items.map(d => `
+        <div class="history-item" onclick="setExample(${JSON.stringify(d.text.replace('...',''))})">
+          <div class="h-emoji">${d.emoji}</div>
+          <div class="h-text">${escHtml(d.text)}</div>
+          <div class="h-badge ${d.css}">${d.label}</div>
+        </div>
+      `).join('');
+
+      document.getElementById('historySection').style.display = 'block';
+    } catch (_) {}
+  }
+
+  function escHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+</script>
+</body>
+</html>
